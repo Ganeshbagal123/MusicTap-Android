@@ -36,7 +36,7 @@ jobs:
           set -e
 
           if [ ! -f "MusicTap-Android-Source.zip" ]; then
-            echo "ERROR: MusicTap-Android-Source.zip not found in repository root."
+            echo "ERROR: MusicTap-Android-Source.zip not found!"
             exit 1
           fi
 
@@ -45,12 +45,12 @@ jobs:
           PROJECT_DIR=$(find extracted -name settings.gradle.kts -type f -printf '%h\n' | head -n 1)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Android project settings.gradle.kts not found."
+            echo "ERROR: Android project not found in ZIP!"
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project found at: $PROJECT_DIR"
+          echo "Project found: $PROJECT_DIR"
 
       - name: Replace MainActivity source
         shell: bash
@@ -60,16 +60,17 @@ jobs:
           TARGET="$PROJECT_DIR/app/src/main/java/com/example/musictap/MainActivity.kt"
 
           if [ ! -f "$GITHUB_WORKSPACE/MainActivity.kt" ]; then
-            echo "ERROR: MainActivity.kt not found in repository root."
+            echo "ERROR: Root MainActivity.kt not found!"
             exit 1
           fi
 
           mkdir -p "$(dirname "$TARGET")"
+
           cp "$GITHUB_WORKSPACE/MainActivity.kt" "$TARGET"
 
-          echo "MainActivity.kt copied successfully."
+          echo "MainActivity.kt replacement completed."
 
-      - name: Verify Android source files
+      - name: Verify Kotlin source files
         shell: bash
         run: |
           set -e
@@ -77,24 +78,45 @@ jobs:
           MAIN="$PROJECT_DIR/app/src/main/java/com/example/musictap/MainActivity.kt"
           SERVICE="$PROJECT_DIR/app/src/main/java/com/example/musictap/PianoAccessibilityService.kt"
 
-          echo "Checking MainActivity.kt..."
-          test -f "$MAIN"
+          test -f "$MAIN" || {
+            echo "ERROR: MainActivity.kt missing!"
+            exit 1
+          }
 
-          if grep -n "intValue()" "$MAIN"; then
-            echo "ERROR: Old intValue() code detected."
+          test -f "$SERVICE" || {
+            echo "ERROR: PianoAccessibilityService.kt missing!"
+            exit 1
+          }
+
+          if grep -q "intValue()" "$MAIN"; then
+            echo "ERROR: Old intValue() code detected!"
             exit 1
           fi
 
           if ! grep -q "fun readInt" "$MAIN"; then
-            echo "ERROR: readInt() method is missing."
+            echo "ERROR: readInt() method missing!"
             exit 1
           fi
 
-          echo "Checking PianoAccessibilityService.kt..."
-          test -f "$SERVICE"
+          echo "Both Kotlin files verified."
 
-          echo "Both Kotlin source files are present."
-          echo "Source verification successful."
+      - name: Show exact Kotlin source being compiled
+        shell: bash
+        run: |
+          set -e
+
+          FILE="$PROJECT_DIR/app/src/main/java/com/example/musictap/MainActivity.kt"
+
+          echo "========== ACTUAL COMPILED FILE =========="
+          nl -ba "$FILE" | sed -n '1,180p'
+
+          echo "========== ROOT FILE COMPARISON =========="
+          sha256sum "$FILE" "$GITHUB_WORKSPACE/MainActivity.kt"
+
+          echo "========== SERVICE SOURCE =========="
+          nl -ba "$PROJECT_DIR/app/src/main/java/com/example/musictap/PianoAccessibilityService.kt" | sed -n '1,180p'
+
+          echo "========== END DIAGNOSTICS =========="
 
       - name: Build debug APK
         shell: bash
@@ -106,14 +128,16 @@ jobs:
       - name: Verify APK
         shell: bash
         run: |
+          set -e
+
           APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
 
           if [ ! -f "$APK" ]; then
-            echo "ERROR: APK was not generated."
+            echo "ERROR: APK was not generated!"
             exit 1
           fi
 
-          echo "APK generated successfully."
+          echo "APK generated successfully:"
           ls -lh "$APK"
 
       - name: Upload APK
@@ -123,4 +147,3 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
-          
