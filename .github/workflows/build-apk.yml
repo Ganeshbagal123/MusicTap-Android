@@ -7,6 +7,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build Android APK
@@ -22,55 +25,96 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
       - name: Extract MusicTap source
+        shell: bash
         run: |
+          set -e
+
+          if [ ! -f "MusicTap-Android-Source.zip" ]; then
+            echo "ERROR: MusicTap-Android-Source.zip not found in repository root."
+            exit 1
+          fi
+
           unzip -o MusicTap-Android-Source.zip -d extracted
 
           PROJECT_DIR=$(find extracted -name settings.gradle.kts -type f -printf '%h\n' | head -n 1)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: settings.gradle.kts not found in ZIP"
+            echo "ERROR: Android project settings.gradle.kts not found."
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Android project found at: $PROJECT_DIR"
 
-      
       - name: Replace MainActivity source
+        shell: bash
         run: |
+          set -e
+
           TARGET="$PROJECT_DIR/app/src/main/java/com/example/musictap/MainActivity.kt"
 
-          echo "Checking root MainActivity.kt..."
-          test -f "$GITHUB_WORKSPACE/MainActivity.kt"
+          if [ ! -f "$GITHUB_WORKSPACE/MainActivity.kt" ]; then
+            echo "ERROR: MainActivity.kt not found in repository root."
+            exit 1
+          fi
 
           mkdir -p "$(dirname "$TARGET")"
           cp "$GITHUB_WORKSPACE/MainActivity.kt" "$TARGET"
 
-          echo "Checking copied file..."
-          head -n 10 "$TARGET"
+          echo "MainActivity.kt copied successfully."
 
-          echo "Checking for old code..."
-          if grep -n "intValue()" "$TARGET"; then
-            echo "ERROR: Old MainActivity.kt is still being used!"
+      - name: Verify Android source files
+        shell: bash
+        run: |
+          set -e
+
+          MAIN="$PROJECT_DIR/app/src/main/java/com/example/musictap/MainActivity.kt"
+          SERVICE="$PROJECT_DIR/app/src/main/java/com/example/musictap/PianoAccessibilityService.kt"
+
+          echo "Checking MainActivity.kt..."
+          test -f "$MAIN"
+
+          if grep -n "intValue()" "$MAIN"; then
+            echo "ERROR: Old intValue() code detected."
             exit 1
           fi
 
-          echo "Checking readInt method..."
-          grep -n "fun readInt" "$TARGET"
+          if ! grep -q "fun readInt" "$MAIN"; then
+            echo "ERROR: readInt() method is missing."
+            exit 1
+          fi
 
-          echo "MainActivity replacement verified."
-          
+          echo "Checking PianoAccessibilityService.kt..."
+          test -f "$SERVICE"
+
+          echo "Both Kotlin source files are present."
+          echo "Source verification successful."
 
       - name: Build debug APK
+        shell: bash
         run: |
+          set -e
           cd "$PROJECT_DIR"
           gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "ERROR: APK was not generated."
+            exit 1
+          fi
+
+          echo "APK generated successfully."
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
