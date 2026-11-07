@@ -1,0 +1,54 @@
+name: Build MusicTap APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Extract MusicTap source
+        run: |
+          unzip -q MusicTap-Android-Source.zip -d extracted
+          PROJECT_DIR="$(dirname "$(find extracted -name settings.gradle.kts -print -quit)")"
+          if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR/app" ]; then
+            echo "MusicTap project files not found"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        run: |
+          gradle --no-daemon -p "$PROJECT_DIR" :app:assembleDebug
+          APK_PATH="$(find "$PROJECT_DIR/app/build/outputs/apk/debug" -name '*.apk' -print -quit)"
+          if [ -z "$APK_PATH" ]; then
+            echo "APK was not generated"
+            exit 1
+          fi
+          echo "APK_PATH=$APK_PATH" >> "$GITHUB_ENV"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MusicTap-debug-apk
+          path: ${{ env.APK_PATH }}
+          if-no-files-found: error
+          
