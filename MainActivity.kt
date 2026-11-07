@@ -1,8 +1,9 @@
-﻿package com.example.musictap
+
+package com.example.musictap
 
 import android.app.Activity
-import android.os.Bundle
 import android.content.Intent
+import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
 import android.view.ViewGroup
@@ -13,6 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 
 class MainActivity : Activity() {
+
     private lateinit var status: TextView
     private lateinit var xC: EditText
     private lateinit var xE: EditText
@@ -43,7 +45,12 @@ class MainActivity : Activity() {
                 setSingleLine(true)
                 setText(value)
                 textSize = 16f
-                page.addView(this, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+
+                page.addView(
+                    this,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
             }
         }
 
@@ -54,7 +61,7 @@ class MainActivity : Activity() {
         })
 
         status = TextView(this).apply {
-            text = "Accessibility service: checking…"
+            text = "Accessibility service: checking..."
             textSize = 14f
             setPadding(0, 16, 0, 8)
         }
@@ -68,24 +75,35 @@ class MainActivity : Activity() {
         })
 
         label("Enter the screen X coordinate for each piano key (pixels)")
+
         xC = field("C4 X coordinate", "250")
         xE = field("E4 X coordinate", "400")
         xG = field("G4 X coordinate", "550")
+
         label("Shared screen Y coordinate (centre of piano keys)")
         y = field("Y coordinate", "1500")
+
         label("Touch duration in milliseconds")
         noteDuration = field("Duration", "120")
+
         label("Gap between notes in milliseconds")
         gap = field("Gap", "350")
 
         page.addView(Button(this).apply {
             text = "2. Test one C4 tap"
+
             setOnClickListener {
-                val xx = xC.intValue()
-                val yy = y.intValue()
+                val xx = readInt(xC)
+                val yy = readInt(y)
+
                 if (xx == null || yy == null) {
                     toast("Enter valid X and Y coordinates")
-                } else if (!PianoAccessibilityService.tap(xx, yy, duration())) {
+                } else if (!PianoAccessibilityService.tap(
+                        xx,
+                        yy,
+                        duration()
+                    )
+                ) {
                     toast("Enable MusicTap accessibility first")
                 } else {
                     toast("Tap gesture sent")
@@ -95,16 +113,26 @@ class MainActivity : Activity() {
 
         page.addView(Button(this).apply {
             text = "3. Play C4 – E4 – G4 – C4"
-            setOnClickListener { playTestSequence() }
+            setOnClickListener {
+                playTestSequence()
+            }
         })
 
         page.addView(Button(this).apply {
             text = "STOP"
-            setOnClickListener { PianoAccessibilityService.stopSequence() }
+            setOnClickListener {
+                PianoAccessibilityService.stopSequence()
+            }
         })
 
         page.addView(TextView(this).apply {
-            text = "\nTip: Open Perfect Piano, keep its piano keyboard visible, then return here and enter the centre coordinates of the keys. Coordinates are device screen pixels."
+            text = """
+                
+                Tip:
+                Open Perfect Piano and keep its piano keyboard visible.
+                Return here and enter the centre coordinates of the keys.
+                Coordinates are device screen pixels.
+            """.trimIndent()
             textSize = 13f
         })
 
@@ -113,6 +141,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+
         status.text = if (PianoAccessibilityService.isEnabled) {
             "Accessibility service: ENABLED"
         } else {
@@ -120,39 +149,46 @@ class MainActivity : Activity() {
         }
     }
 
-    
-private fun playTestSequence() {
-    val yy = readInt(y)
-    val c = readInt(xC)
-    val e = readInt(xE)
-    val g = readInt(xG)
+    private fun playTestSequence() {
+        val yy = readInt(y)
+        val c = readInt(xC)
+        val e = readInt(xE)
+        val g = readInt(xG)
 
-    if (yy == null || c == null || e == null || g == null) {
-        toast("Enter valid coordinates first")
-        return
+        if (yy == null || c == null || e == null || g == null) {
+            toast("Enter valid coordinates first")
+            return
+        }
+
+        val notes = listOf(
+            PianoAccessibilityService.Note(c, yy),
+            PianoAccessibilityService.Note(e, yy),
+            PianoAccessibilityService.Note(g, yy),
+            PianoAccessibilityService.Note(c, yy)
+        )
+
+        val started = PianoAccessibilityService.play(
+            notes,
+            duration(),
+            (readInt(gap) ?: 350).coerceIn(0, 2000)
+        )
+
+        if (!started) {
+            toast("Enable MusicTap accessibility first")
+        }
     }
 
-    val notes = listOf(
-        PianoAccessibilityService.Note(c, yy),
-        PianoAccessibilityService.Note(e, yy),
-        PianoAccessibilityService.Note(g, yy),
-        PianoAccessibilityService.Note(c, yy)
-    )
+    private fun readInt(field: EditText): Int? {
+        return field.text.toString().trim().toIntOrNull()
+    }
 
-    val started = PianoAccessibilityService.play(
-        notes,
-        duration(),
-        (readInt(gap) ?: 350).coerceIn(0, 2000)
-    )
+    private fun duration(): Long {
+        return (readInt(noteDuration) ?: 120)
+            .coerceIn(40, 1000)
+            .toLong()
+    }
 
-    if (!started) toast("Enable MusicTap accessibility first")
-}
-
-
-    private fun duration(): Long = (noteDuration.intValue() ?: 120).coerceIn(40, 1000).toLong()
-
-    private fun EditText.intValue(): Int? = text.toString().trim().toIntOrNull()
-
-    private fun toast(message: String) =
+    private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
 }
