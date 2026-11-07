@@ -1,3 +1,4 @@
+
 name: Build MusicTap APK
 
 on:
@@ -8,13 +9,14 @@ on:
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -27,28 +29,43 @@ jobs:
 
       - name: Extract MusicTap source
         run: |
-          unzip -q MusicTap-Android-Source.zip -d extracted
-          PROJECT_DIR="$(dirname "$(find extracted -name settings.gradle.kts -print -quit)")"
-          if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "MusicTap project files not found"
-            exit 1
-          fi
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          unzip -o MusicTap-Android-Source.zip -d extracted
 
-      - name: Build APK
-        run: |
-          gradle --no-daemon -p "$PROJECT_DIR" :app:assembleDebug
-          APK_PATH="$(find "$PROJECT_DIR/app/build/outputs/apk/debug" -name '*.apk' -print -quit)"
-          if [ -z "$APK_PATH" ]; then
-            echo "APK was not generated"
+          PROJECT_DIR=$(find extracted -name settings.gradle.kts -type f -printf '%h\n' | head -n 1)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: settings.gradle.kts not found in ZIP"
             exit 1
           fi
-          echo "APK_PATH=$APK_PATH" >> "$GITHUB_ENV"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project found at: $PROJECT_DIR"
+
+      - name: Replace MainActivity source
+        run: |
+          TARGET="$PROJECT_DIR/app/src/main/java/com/example/musictap/MainActivity.kt"
+
+          if [ ! -f MainActivity.kt ]; then
+            echo "ERROR: MainActivity.kt not found in repository root"
+            exit 1
+          fi
+
+          mkdir -p "$(dirname "$TARGET")"
+          cp MainActivity.kt "$TARGET"
+
+          echo "Updated MainActivity.kt:"
+          head -n 5 "$TARGET"
+
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR"
+          gradle --no-daemon --stacktrace :app:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MusicTap-debug-apk
-          path: ${{ env.APK_PATH }}
+          name: MusicTap-debug-APK
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 7
           
