@@ -41,20 +41,31 @@ jobs:
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Android project found at: $PROJECT_DIR"
 
+      
       - name: Replace MainActivity source
         run: |
           TARGET="$PROJECT_DIR/app/src/main/java/com/example/musictap/MainActivity.kt"
 
-          if [ ! -f MainActivity.kt ]; then
-            echo "ERROR: MainActivity.kt not found in repository root"
+          echo "Checking root MainActivity.kt..."
+          test -f "$GITHUB_WORKSPACE/MainActivity.kt"
+
+          mkdir -p "$(dirname "$TARGET")"
+          cp "$GITHUB_WORKSPACE/MainActivity.kt" "$TARGET"
+
+          echo "Checking copied file..."
+          head -n 10 "$TARGET"
+
+          echo "Checking for old code..."
+          if grep -n "intValue()" "$TARGET"; then
+            echo "ERROR: Old MainActivity.kt is still being used!"
             exit 1
           fi
 
-          mkdir -p "$(dirname "$TARGET")"
-          cp MainActivity.kt "$TARGET"
+          echo "Checking readInt method..."
+          grep -n "fun readInt" "$TARGET"
 
-          echo "Updated MainActivity.kt:"
-          head -n 5 "$TARGET"
+          echo "MainActivity replacement verified."
+          
 
       - name: Build debug APK
         run: |
